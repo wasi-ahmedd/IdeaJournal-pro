@@ -90,6 +90,8 @@ def home():
 @app.route("/dashboard")
 def dash():
     return send_from_directory(STATIC, "dashboard.html")
+
+
     # ================= IDEA & PDF ROUTES (STEP 3) =================
 def render_pdf(folder):
     json_path = os.path.join(IDEAS, folder, 'idea.json')
@@ -240,6 +242,37 @@ def view_pdf(folder):
     return send_from_directory(os.path.dirname(pdf), 'idea.pdf')
 
 # ================= END IDEA & PDF ROUTES =================
+# ================= SIGNUP (STEP 4) =================
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    # Show signup page
+    if request.method == 'GET':
+        return send_from_directory('templates', 'signup.html')
+
+    # Handle signup
+    data = request.form or request.json or {}
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+
+    if not username or not password:
+        return jsonify(error='Username and password required'), 400
+
+    users = load_users()
+
+    if username in users:
+        return jsonify(error='User already exists'), 409
+
+    users[username] = {
+        'password_hash': generate_password_hash(password),
+        'password_encrypted': MASTER_FERNET.encrypt(password.encode()).decode('utf-8'),
+        'created_at': datetime.now().isoformat()
+    }
+
+    save_users(users)
+    return jsonify(message='Signup successful')
+
+# ================= END SIGNUP =================
 
 
 # (your remaining idea routes stay the same — we’ll re-add next step)
