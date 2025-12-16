@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Idea Dashboard</title>
+  <style>
+body{font-family:Arial,sans-serif;background:#0f172a;color:#e5e7eb;padding:30px}
+h1{margin-bottom:20px}
+.top-bar{display:flex;justify-content:space-between;margin-bottom:20px}
+button{padding:10px 14px;border-radius:10px;border:none;cursor:pointer;background:#2563eb;color:white;font-weight:bold;transition:.25s}
+button:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.35)}
+button:active{transform:translateY(0);box-shadow:0 4px 10px rgba(0,0,0,.25)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
+.card{background:#020617;border:1px solid #1e293b;border-radius:16px;padding:18px}
+.meta{font-size:13px;opacity:.8}
+.actions{margin-top:12px;display:flex;gap:8px}
+.delete{background:#dc2626}
+</style>
+</head>
+<body>
+<div class="top-bar">
+  <h1>📊 Idea Dashboard</h1>
+  <button onclick="location.href='/'">➕ New Idea</button>
+</div>
+<div class="grid" id="ideas"></div>
+<script>
+async function load(){
+  const r = await fetch('/api/dashboard/ideas');
+  const ideas = await r.json();
+  const c = document.getElementById('ideas');
+  c.innerHTML='';
+  ideas.forEach(i=>{
+    const d=document.createElement('div');
+    d.className='card';
+    d.innerHTML=`<h3>${i.title}</h3><div class=meta>Created: ${i.dateCreated}</div><div class=meta>Updates: ${i.updatesCount}</div><p>${i.summary||''}</p><div class=actions><button onclick="openIdea('${i.folder}')">Open</button><button onclick="viewPDF('${i.folder}')">PDF</button><button class=delete onclick="del('${i.folder}')">Delete</button></div>`;
+    c.appendChild(d);
+  });
+}
+function openIdea(f){location.href='/?idea='+encodeURIComponent(f)}
+function viewPDF(f){window.open('/api/idea/'+encodeURIComponent(f)+'/pdf','_blank')}
+async function del(f){if(!confirm('Delete?'))return;const r=await fetch('/api/idea/'+encodeURIComponent(f),{method:'DELETE'});const j=await r.json();alert(j.message||j.error);load();}
+load();
+</script>
+</body>
+</html>

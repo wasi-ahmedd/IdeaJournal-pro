@@ -1,0 +1,6 @@
+﻿__pycache__/
+*.pyc
+*.log
+users/users.enc
+logs/
+.env

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Idea Journal — Full App</title>
+
+  <!-- UI, CSS, THEMES, ANIMATIONS: UNCHANGED -->
+
+  <style>
+/* ===== EXACT SAME CSS AS BEFORE (UNCHANGED) ===== */
+:root{
+  --bg: linear-gradient(180deg,#071025 0%, #081226 100%);
+  --glass-bg: rgba(20,40,70,0.18);
+  --glass-border: rgba(255,255,255,0.12);
+  --glass-inner: rgba(255,255255,0.25);
+  --shadow-soft: 0 10px 22px rgba(0,0,0,0.45);
+  --shadow-lift: 0 1px 3px rgba(255,255,255,0.08) inset;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:#e6eef6;min-height:100vh}
+header{position:sticky;top:0;z-index:1000;padding:22px 34px;display:flex;gap:20px;align-items:center;background:var(--glass-bg);backdrop-filter:blur(6px) saturate(160%);border-bottom:1px solid var(--glass-border);border-radius:0 0 28px 28px;box-shadow:var(--shadow-soft),var(--shadow-lift)}
+h1{font-size:20px;margin:0}
+.container{max-width:1100px;margin:28px auto;padding:20px}
+.grid{display:grid;grid-template-columns:1fr 420px;gap:20px}
+.card{background:var(--glass-bg);backdrop-filter:blur(22px) saturate(200%);border-radius:28px;padding:22px;border:1px solid var(--glass-border);box-shadow:var(--shadow-soft),var(--shadow-lift);transition:.3s}
+.card:hover{transform:translateY(-4px)}
+label{display:block;margin:10px 0 6px;font-size:13px}
+textarea,select,input{width:100%;padding:12px;border-radius:18px;border:1px solid var(--glass-border);background:rgba(255,255,255,0.08);color:#fff}
+.btn{padding:12px 16px;border-radius:18px;background:rgba(255,255,255,0.18);border:1px solid var(--glass-border);color:#fff;font-weight:600;cursor:pointer;transition:.25s}
+.btn:hover{transform:translateY(-3px);box-shadow:0 8px 22px rgba(0,0,0,.35)}
+.btn:active{transform:translateY(0);box-shadow:0 4px 12px rgba(0,0,0,.25)}
+.btn.ghost{background:rgba(255,255,255,0.06)}
+</style>
+</head>
+
+<body class="theme-dark">
+
+<header>
+  <div>
+    <h1>Idea Journal</h1>
+    <div style="font-size:13px;opacity:.7">Capture ideas, updates & export data</div>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:8px">
+    <button class="btn ghost" id="importJsonBtn">Import JSON</button>
+    <button class="btn ghost" onclick="location.href='/dashboard'">📊 Dashboard</button>
+  </div>
+</header>
+
+<main class="container">
+  <div class="grid">
+    <section class="card">
+      <h3>New Idea</h3>
+      <label>Idea Title</label><textarea id="title"></textarea>
+      <label>Date Created</label><textarea id="date"></textarea>
+      <label>Short Summary</label><textarea id="summary"></textarea>
+      <label>Trigger</label><textarea id="trigger"></textarea>
+      <label>Description</label><textarea id="description"></textarea>
+      <label>Use Cases</label><textarea id="usecases"></textarea>
+      <label>Impact</label><textarea id="impact"></textarea>
+      <label>Challenges</label><textarea id="challenges"></textarea>
+      <label>Current Understanding</label><textarea id="understanding"></textarea>
+      <div style="margin-top:12px"><button class="btn" id="saveBtn">Save Idea</button></div>
+      <hr />
+      <h4>Add Update</h4>
+      <input id="updateTitle" placeholder="Update title" /><br>
+      <textarea id="updateText" placeholder="Update text"></textarea>
+      <button class="btn" id="addUpdateBtn">Add Update</button>
+    </section>
+
+    <aside class="card">
+      <h3>Selected Idea</h3>
+      <div id="status">No idea loaded</div>
+    </aside>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+$('date').value = new Date().toISOString().slice(0,10);
+
+// ================= JSON IMPORT (SAFE + DEBUG) =================
+document.addEventListener('DOMContentLoaded', () => {
+  const importBtn = document.getElementById('importJsonBtn');
+
+  if (!importBtn) {
+    alert('Import JSON button not found in DOM');
+    console.error('importJsonBtn missing');
+    return;
+  }
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'application/json';
+  fileInput.style.display = 'none';
+  document.body.appendChild(fileInput);
+
+  importBtn.addEventListener('click', () => {
+    fileInput.value = '';
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+
+    if (!file) {
+      alert('No file selected');
+      return;
+    }
+
+    try {
+      const text = await file.text();
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        alert('Invalid JSON file');
+        return;
+      }
+
+      // Accept array OR object
+if (Array.isArray(data)) {
+  if (data.length === 0) {
+    alert('JSON array is empty');
+    return;
+  }
+  data = data[0]; // take first idea
+}
+
+if (typeof data !== 'object') {
+  alert('Invalid JSON structure');
+  return;
+}
+
+
+      // Fill form fields
+      title.value = data.title || '';
+      date.value = data.dateCreated || new Date().toISOString().slice(0, 10);
+      summary.value = data.summary || '';
+      trigger.value = data.trigger || '';
+      description.value = data.description || '';
+      usecases.value = Array.isArray(data.useCases) ? data.useCases.join(', ') : '';
+      impact.value = data.potentialImpact || '';
+      challenges.value = data.challenges || '';
+      understanding.value = data.currentUnderstanding || '';
+
+      // Force NEW idea
+      currentFolder = null;
+      document.getElementById('status').innerText =
+        'JSON imported — review and click Save';
+
+    } catch (err) {
+      console.error(err);
+      alert('Failed to read JSON file');
+    }
+  });
+});
+// ================= END JSON IMPORT =================
+
+function qp(n){return new URLSearchParams(location.search).get(n)}
+let currentFolder = qp('idea');
+
+async function loadIdea(){
+  if(!currentFolder) return;
+  const r = await fetch('/api/idea/'+encodeURIComponent(currentFolder));
+  if(!r.ok) return;
+  const d = await r.json();
+  $('title').value=d.title||'';
+  $('date').value=d.dateCreated||'';
+  $('summary').value=d.summary||'';
+  $('trigger').value=d.trigger||'';
+  $('description').value=d.description||'';
+  $('usecases').value=(d.useCases||[]).join(', ');
+  $('impact').value=d.potentialImpact||'';
+  $('challenges').value=d.challenges||'';
+  $('understanding').value=d.currentUnderstanding||'';
+  $('status').innerText='Loaded: '+d.title;
+}
+
+$('saveBtn').onclick = async ()=>{
+  const payload={
+    title:$('title').value,
+    dateCreated:$('date').value,
+    summary:$('summary').value,
+    trigger:$('trigger').value,
+    description:$('description').value,
+    useCases:$('usecases').value.split(',').map(x=>x.trim()).filter(Boolean),
+    potentialImpact:$('impact').value,
+    challenges:$('challenges').value,
+    currentUnderstanding:$('understanding').value
+  };
+  const r = await fetch('/api/save-idea',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const j = await r.json();
+  alert(j.message||j.error);
+  location.href='/dashboard';
+};
+
+$('addUpdateBtn').onclick = async ()=>{
+  if(!currentFolder) return alert('Open an idea first');
+  const r = await fetch('/api/add-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ideaTitle:currentFolder,updateTitle:$('updateTitle').value,updateText:$('updateText').value})});
+  const j = await r.json();
+  alert(j.message||j.error);
+};
+
+loadIdea();
+</script>
+</body>
+</html>
