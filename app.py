@@ -1,181 +1,98 @@
-from flask import Flask, send_from_directory, request, jsonify, Response
+# ================= IMPORTS =================
+from flask import Flask, send_from_directory, request, jsonify, Response, session
 from datetime import datetime
-import os, json, shutil
+import os, json, shutil, base64, hashlib
+
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem
 
-app = Flask(__name__, static_folder='static')
+from werkzeug.security import generate_password_hash, check_password_hash
+from cryptography.fernet import Fernet
+
+
+# ================= BASE PATHS =================
 BASE = os.path.dirname(os.path.abspath(__file__))
-IDEAS = os.path.join(BASE,'ideas')
-STATIC = os.path.join(BASE,'static')
+STATIC = os.path.join(BASE, 'static')
+IDEAS = os.path.join(BASE, 'ideas')
+USERS_DIR = os.path.join(BASE, 'users')
+USERS_FILE = os.path.join(USERS_DIR, 'users.enc')
+
 os.makedirs(IDEAS, exist_ok=True)
+os.makedirs(USERS_DIR, exist_ok=True)
 
-def clean(s): return ''.join(c for c in s if c.isalnum() or c in ' _-').strip()
 
-def unique(name):
-    n=name; i=1
-    while os.path.exists(os.path.join(IDEAS,n)):
-        i+=1; n=f"{name} ({i})"
-    return n
+# ================= AUTH SKELETON (STEP 1) =================
+ADMIN_USERNAME = os.environ.get("IDEAJOURNAL_ADMIN_USERNAME")
+ADMIN_PASSWORD = os.environ.get("IDEAJOURNAL_ADMIN_PASSWORD")
+MASTER_KEY = os.environ.get("IDEAJOURNAL_MASTER_KEY")
 
-@app.route('/')
-def home(): return send_from_directory(STATIC,'index.html')
-
-@app.route('/dashboard')
-def dash(): return send_from_directory(STATIC,'dashboard.html')
-
-@app.route('/api/save-idea', methods=['POST'])
-def save():
-    d = request.json or {}
-    if not d.get('title'):
-        return jsonify(error='Title required'), 400
-
-    folder = unique(clean(d['title']))
-    path = os.path.join(IDEAS, folder)
-    os.makedirs(path)
-
-    d['dateCreated'] = d.get('dateCreated') or datetime.now().strftime('%Y-%m-%d')
-    d['generatedAt'] = datetime.now().strftime('%d %B %Y %H:%M')
-    d.setdefault('updates', [])
-
-    json_path = os.path.join(path, 'idea.json')
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(d, f, indent=2)
-
-    render_pdf(folder)
-
-    return jsonify(message='Idea saved', folder=folder)
-
-@app.route('/api/dashboard/ideas')
-def list_ideas():
-    out=[]
-    for f in os.listdir(IDEAS):
-        p=os.path.join(IDEAS,f,'idea.json')
-        if os.path.exists(p):
-            d=json.load(open(p))
-            out.append({'folder':f,'title':d.get('title'),'dateCreated':d.get('dateCreated'),'summary':d.get('summary'),'updatesCount':len(d.get('updates',[]))})
-    return jsonify(out)
-
-@app.route('/api/idea/<folder>')
-def get(folder):
-    json_path = os.path.join(IDEAS, clean(folder), 'idea.json')
-    if not os.path.exists(json_path):
-        return jsonify(error='Not found'), 404
-    with open(json_path, encoding='utf-8') as f:
-        return Response(json.dumps(json.load(f), indent=2), mimetype='application/json')
-
-@app.route('/api/add-update', methods=['POST'])
-def add():
-    d = request.json or {}
-    folder = clean(d.get('ideaTitle', ''))
-    path = os.path.join(IDEAS, folder)
-    json_path = os.path.join(path, 'idea.json')
-
-    if not os.path.exists(json_path):
-        return jsonify(error='Idea not found'), 404
-
-    idea = json.load(open(json_path, encoding='utf-8'))
-
-    idea.setdefault('updates', []).append({
-        'date': datetime.now().strftime('%Y-%m-%d'),
-        'text': d.get('updateText', '')
-    })
-
-    idea['generatedAt'] = datetime.now().strftime('%d %B %Y %H:%M')
-
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(idea, f, indent=2)
-
-    render_pdf(folder)
-
-    return jsonify(message='Update added')
-
-@app.route('/api/idea/<folder>', methods=['DELETE'])
-def delete(folder):
-    path = os.path.join(IDEAS, clean(folder))
-    if not os.path.exists(path):
-        return jsonify(error='Not found'), 404
-    shutil.rmtree(path)
-    return jsonify(message='Deleted')
-
-def render_pdf(folder):
-    json_path = os.path.join(IDEAS, folder, 'idea.json')
-    pdf_path = os.path.join(IDEAS, folder, 'idea.pdf')
-
-    if not os.path.exists(json_path):
-        return
-
-    data = json.load(open(json_path, encoding='utf-8'))
-
-    styles = getSampleStyleSheet()
-    doc = SimpleDocTemplate(
-        pdf_path,
-        pagesize=A4,
-        rightMargin=2*cm,
-        leftMargin=2*cm,
-        topMargin=2*cm,
-        bottomMargin=2*cm
+if not all([ADMIN_USERNAME, ADMIN_PASSWORD, MASTER_KEY]):
+    raise RuntimeError(
+        "Missing env vars. Set IDEAJOURNAL_ADMIN_USERNAME, IDEAJOURNAL_ADMIN_PASSWORD, IDEAJOURNAL_MASTER_KEY"
     )
 
-    story = []
+def derive_fernet(secret: str) -> Fernet:
+    key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+    return Fernet(key)
 
-    def section(title, text):
-        story.append(Spacer(1, 12))
-        story.append(Paragraph(f"<b>{title}</b>", styles['Heading2']))
-        story.append(Spacer(1, 6))
-        story.append(Paragraph(text or '-', styles['Normal']))
+MASTER_FERNET = derive_fernet(MASTER_KEY)
+ADMIN_FERNET = derive_fernet(ADMIN_PASSWORD)
 
-    story.append(Paragraph(f"<b>{data.get('title')}</b>", styles['Title']))
-    story.append(Spacer(1, 6))
-    story.append(Paragraph(
-        f"Published on {data.get('dateCreated')} · Idea Journal",
-        styles['Italic']
-    ))
+def is_logged_in():
+    return bool(session.get("user"))
 
-    section('Summary', data.get('summary'))
-    section('Trigger', data.get('trigger'))
-    section('Description', data.get('description'))
-
-    story.append(Spacer(1, 12))
-    story.append(Paragraph('<b>Use Cases</b>', styles['Heading2']))
-    if data.get('useCases'):
-        story.append(ListFlowable([
-            ListItem(Paragraph(u, styles['Normal'])) for u in data.get('useCases', [])
-        ], bulletType='bullet'))
-    else:
-        story.append(Paragraph('-', styles['Normal']))
-
-    section('Impact', data.get('potentialImpact'))
-    section('Challenges', data.get('challenges'))
-    section('Current Understanding', data.get('currentUnderstanding'))
-
-    if data.get('updates'):
-        story.append(Spacer(1, 12))
-        story.append(Paragraph('<b>Updates</b>', styles['Heading2']))
-        for u in data.get('updates', []):
-            story.append(Paragraph(
-                f"<b>{u.get('date')}</b> — {u.get('text')}",
-                styles['Normal']
-            ))
-
-    story.append(Spacer(1, 30))
-    story.append(Paragraph(
-        f"Generated on {data.get('generatedAt')}",
-        styles['Italic']
-    ))
-
-    doc.build(story)
+def is_admin():
+    return session.get("role") == "admin"
 
 
-@app.route('/api/idea/<folder>/pdf')
-def view_pdf(folder):
-    pdf = os.path.join(IDEAS, clean(folder), 'idea.pdf')
-    if not os.path.exists(pdf):
-        render_pdf(clean(folder))
-    return send_from_directory(os.path.dirname(pdf), 'idea.pdf')
+# ================= USER STORE (STEP 2) =================
+def load_users():
+    if not os.path.exists(USERS_FILE) or os.path.getsize(USERS_FILE) == 0:
+        return {}
+
+    try:
+        encrypted = open(USERS_FILE, "rb").read()
+        decrypted = ADMIN_FERNET.decrypt(encrypted)
+        return json.loads(decrypted.decode("utf-8"))
+    except Exception as e:
+        raise RuntimeError("Failed to decrypt users.enc") from e
+
+def save_users(users: dict):
+    raw = json.dumps(users, indent=2).encode("utf-8")
+    encrypted = ADMIN_FERNET.encrypt(raw)
+    with open(USERS_FILE, "wb") as f:
+        f.write(encrypted)
 
 
-if __name__ == '__main__':
+# ================= FLASK APP =================
+app = Flask(__name__, static_folder="static")
+app.secret_key = "temporary-dev-secret"  # we’ll improve later
+
+
+# ================= EXISTING ROUTES =================
+def clean(s): 
+    return ''.join(c for c in s if c.isalnum() or c in ' _-').strip()
+
+def unique(name):
+    n = name
+    i = 1
+    while os.path.exists(os.path.join(IDEAS, n)):
+        i += 1
+        n = f"{name} ({i})"
+    return n
+
+@app.route("/")
+def home():
+    return send_from_directory(STATIC, "index.html")
+
+@app.route("/dashboard")
+def dash():
+    return send_from_directory(STATIC, "dashboard.html")
+
+# (your remaining idea routes stay the same — we’ll re-add next step)
+
+
+if __name__ == "__main__":
     app.run(debug=True)
