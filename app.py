@@ -273,6 +273,38 @@ def signup():
     return jsonify(message='Signup successful')
 
 # ================= END SIGNUP =================
+# ================= LOGIN (STEP 5) =================
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    # Show login page
+    if request.method == 'GET':
+        return send_from_directory('templates', 'login.html')
+
+    data = request.form or request.json or {}
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+
+    if not username or not password:
+        return jsonify(error='Username and password required'), 400
+
+    # ---- Hidden admin login ----
+    if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+        session['user'] = ADMIN_USERNAME
+        session['role'] = 'admin'
+        return jsonify(redirect='/dashboard')
+
+    users = load_users()
+    user = users.get(username)
+
+    if not user or not check_password_hash(user['password_hash'], password):
+        return jsonify(error='Invalid credentials'), 401
+
+    session['user'] = username
+    session['role'] = 'user'
+    return jsonify(redirect='/dashboard')
+
+# ================= END LOGIN =================
 
 
 # (your remaining idea routes stay the same — we’ll re-add next step)
