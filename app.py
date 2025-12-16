@@ -90,6 +90,157 @@ def home():
 @app.route("/dashboard")
 def dash():
     return send_from_directory(STATIC, "dashboard.html")
+    # ================= IDEA & PDF ROUTES (STEP 3) =================
+def render_pdf(folder):
+    json_path = os.path.join(IDEAS, folder, 'idea.json')
+    pdf_path = os.path.join(IDEAS, folder, 'idea.pdf')
+
+    if not os.path.exists(json_path):
+        return
+
+    with open(json_path, encoding='utf-8') as f:
+        data = json.load(f)
+
+    styles = getSampleStyleSheet()
+    doc = SimpleDocTemplate(
+        pdf_path,
+        pagesize=A4,
+        rightMargin=2*cm,
+        leftMargin=2*cm,
+        topMargin=2*cm,
+        bottomMargin=2*cm
+    )
+
+    story = []
+
+    def section(title, text):
+        story.append(Spacer(1, 12))
+        story.append(Paragraph(f"<b>{title}</b>", styles['Heading2']))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(text or '-', styles['Normal']))
+
+    story.append(Paragraph(f"<b>{data.get('title')}</b>", styles['Title']))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(
+        f"Published on {data.get('dateCreated')} · Idea Journal",
+        styles['Italic']
+    ))
+
+    section('Summary', data.get('summary'))
+    section('Trigger', data.get('trigger'))
+    section('Description', data.get('description'))
+
+    story.append(Spacer(1, 12))
+    story.append(Paragraph('<b>Use Cases</b>', styles['Heading2']))
+    if data.get('useCases'):
+        story.append(ListFlowable([
+            ListItem(Paragraph(u, styles['Normal'])) for u in data.get('useCases', [])
+        ], bulletType='bullet'))
+    else:
+        story.append(Paragraph('-', styles['Normal']))
+
+    section('Impact', data.get('potentialImpact'))
+    section('Challenges', data.get('challenges'))
+    section('Current Understanding', data.get('currentUnderstanding'))
+
+    if data.get('updates'):
+        story.append(Spacer(1, 12))
+        story.append(Paragraph('<b>Updates</b>', styles['Heading2']))
+        for u in data.get('updates', []):
+            story.append(Paragraph(
+                f"<b>{u.get('date')}</b> — {u.get('text')}",
+                styles['Normal']
+            ))
+
+    story.append(Spacer(1, 30))
+    story.append(Paragraph(
+        f"Generated on {data.get('generatedAt', '')}",
+        styles['Italic']
+    ))
+
+    doc.build(story)
+
+@app.route('/api/save-idea', methods=['POST'])
+def save_idea():
+    data = request.json or {}
+    if not data.get('title'):
+        return jsonify(error='Title required'), 400
+
+    folder = unique(clean(data['title']))
+    path = os.path.join(IDEAS, folder)
+    os.makedirs(path, exist_ok=True)
+
+    data['dateCreated'] = data.get('dateCreated') or datetime.now().strftime('%Y-%m-%d')
+    data.setdefault('updates', [])
+
+    json_path = os.path.join(path, 'idea.json')
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
+
+    render_pdf(folder)
+    return jsonify(message='Idea saved', folder=folder)
+
+
+@app.route('/api/dashboard/ideas')
+def list_ideas():
+    ideas = []
+    for f in os.listdir(IDEAS):
+        p = os.path.join(IDEAS, f, 'idea.json')
+        if os.path.exists(p):
+            with open(p, encoding='utf-8') as fh:
+                d = json.load(fh)
+            ideas.append({
+                'folder': f,
+                'title': d.get('title'),
+                'dateCreated': d.get('dateCreated'),
+                'summary': d.get('summary'),
+                'updatesCount': len(d.get('updates', []))
+            })
+    return jsonify(ideas)
+
+
+@app.route('/api/idea/<folder>')
+def get_idea(folder):
+    path = os.path.join(IDEAS, clean(folder), 'idea.json')
+    if not os.path.exists(path):
+        return jsonify(error='Not found'), 404
+    with open(path, encoding='utf-8') as f:
+        return Response(json.dumps(json.load(f), indent=2), mimetype='application/json')
+
+
+@app.route('/api/add-update', methods=['POST'])
+def add_update():
+    data = request.json or {}
+    folder = clean(data.get('ideaTitle', ''))
+    path = os.path.join(IDEAS, folder, 'idea.json')
+
+    if not os.path.exists(path):
+        return jsonify(error='Idea not found'), 404
+
+    with open(path, encoding='utf-8') as f:
+        idea = json.load(f)
+
+    idea.setdefault('updates', []).append({
+        'date': datetime.now().strftime('%Y-%m-%d'),
+        'text': data.get('updateText', '')
+    })
+
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(idea, f, indent=2)
+
+    render_pdf(folder)
+    return jsonify(message='Update added')
+
+
+@app.route('/api/idea/<folder>/pdf')
+def view_pdf(folder):
+    pdf = os.path.join(IDEAS, clean(folder), 'idea.pdf')
+    if not os.path.exists(pdf):
+        render_pdf(clean(folder))
+    return send_from_directory(os.path.dirname(pdf), 'idea.pdf')
+
+# ================= END IDEA & PDF ROUTES =================
+
 
 # (your remaining idea routes stay the same — we’ll re-add next step)
 
