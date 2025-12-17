@@ -350,16 +350,14 @@ def login():
 
 # (your remaining idea routes stay the same — we’ll re-add next step)
 # ================= ADMIN PAGE (STEP 7) =================
+from flask import render_template
 
 @app.route('/admin')
 @admin_required
 def admin_page():
     users = load_users()
-    return send_from_directory(
-        'templates',
-        'admin.html',
-        users=users
-    )
+    return render_template('admin.html', users=users)
+
 
 # ================= END ADMIN PAGE =================
 
