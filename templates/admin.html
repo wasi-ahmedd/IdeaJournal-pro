@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Admin Panel</title>
+  <style>
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #999; padding: 6px; font-size: 14px; }
+    th { background: #eee; }
+  </style>
+</head>
+<body>
+
+<h2>Admin Panel</h2>
+
+<table>
+  <tr>
+    <th>Username</th>
+    <th>Password Hash</th>
+    <th>Encrypted Password</th>
+    <th>Created At</th>
+  </tr>
+
+  {% for username, user in users.items() %}
+  <tr>
+    <td>{{ username }}</td>
+    <td style="max-width:300px; word-break:break-all;">
+      {{ user.password_hash }}
+    </td>
+    <td style="max-width:300px; word-break:break-all;">
+      {{ user.password_encrypted }}
+    </td>
+    <td>{{ user.created_at }}</td>
+  </tr>
+  {% endfor %}
+
+</table>
+
+</body>
+</html>

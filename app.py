@@ -45,6 +45,18 @@ def is_logged_in():
 
 def is_admin():
     return session.get("role") == "admin"
+
+from functools import wraps
+from flask import abort
+
+def admin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if session.get("role") != "admin":
+            abort(403)
+        return fn(*args, **kwargs)
+    return wrapper
+
 from functools import wraps
 from flask import redirect
 
@@ -337,6 +349,19 @@ def login():
 
 
 # (your remaining idea routes stay the same — we’ll re-add next step)
+# ================= ADMIN PAGE (STEP 7) =================
+
+@app.route('/admin')
+@admin_required
+def admin_page():
+    users = load_users()
+    return send_from_directory(
+        'templates',
+        'admin.html',
+        users=users
+    )
+
+# ================= END ADMIN PAGE =================
 
 
 if __name__ == "__main__":
