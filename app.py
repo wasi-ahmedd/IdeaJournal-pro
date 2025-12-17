@@ -10,8 +10,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowabl
 
 from werkzeug.security import generate_password_hash, check_password_hash
 from cryptography.fernet import Fernet, InvalidToken
+import uuid
 
-
+from io import BytesIO
 
 # ================= BASE PATHS =================
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -46,21 +47,6 @@ def is_logged_in():
 
 def is_admin():
     return session.get("role") == "admin"
-# ================= USER IDEA HELPERS (STEP 8) =================
-
-def user_root():
-    return os.path.join(IDEAS, session['user'])
-
-def idea_root(idea_id):
-    return os.path.join(user_root(), idea_id)
-
-def derive_user_fernet_from_session():
-    raw = session.get('ukey')
-    if not raw:
-        raise RuntimeError("Missing user encryption key in session")
-    return Fernet(base64.urlsafe_b64encode(raw))
-
-# ================= END USER IDEA HELPERS =================
 
 
 def derive_user_fernet(username: str, password: str) -> Fernet:
@@ -94,6 +80,10 @@ def login_required(fn):
         return fn(*args, **kwargs)
     return wrapper
 
+def get_user_fernet():
+    if 'ukey' not in session:
+        raise RuntimeError("User key missing (not logged in)")
+    return Fernet(base64.urlsafe_b64encode(session['ukey']))
 
 
 # ================= USER STORE (STEP 2) =================
@@ -217,26 +207,194 @@ def render_pdf(folder):
 
     doc.build(story)
 
+def render_pdf_bytes(data: dict) -> bytes:
+    buffer = BytesIO()
+
+    styles = getSampleStyleSheet()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=2*cm,
+        leftMargin=2*cm,
+        topMargin=2*cm,
+        bottomMargin=2*cm
+    )
+
+    story = []
+
+    def section(title, text):
+        story.append(Spacer(1, 12))
+        story.append(Paragraph(f"<b>{title}</b>", styles['Heading2']))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(text or '-', styles['Normal']))
+
+    story.append(Paragraph(f"<b>{data.get('title')}</b>", styles['Title']))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(
+        f"Published on {data.get('dateCreated')} · Idea Journal",
+        styles['Italic']
+    ))
+
+    section('Summary', data.get('summary'))
+    section('Trigger', data.get('trigger'))
+    section('Description', data.get('description'))
+
+    story.append(Spacer(1, 12))
+    story.append(Paragraph('<b>Use Cases</b>', styles['Heading2']))
+    if data.get('useCases'):
+        story.append(ListFlowable([
+            ListItem(Paragraph(u, styles['Normal'])) for u in data.get('useCases', [])
+        ], bulletType='bullet'))
+    else:
+        story.append(Paragraph('-', styles['Normal']))
+
+    section('Impact', data.get('potentialImpact'))
+    section('Challenges', data.get('challenges'))
+    section('Current Understanding', data.get('currentUnderstanding'))
+
+    if data.get('updates'):
+        story.append(Spacer(1, 12))
+        story.append(Paragraph('<b>Updates</b>', styles['Heading2']))
+        for u in data.get('updates', []):
+            story.append(Paragraph(
+                f"<b>{u.get('date')}</b> — {u.get('text')}",
+                styles['Normal']
+            ))
+
+    story.append(Spacer(1, 30))
+    story.append(Paragraph(
+        f"Generated on {datetime.now().isoformat()}",
+        styles['Italic']
+    ))
+
+    doc.build(story)
+    pdf = buffer.getvalue()
+    buffer.close()
+
+    return pdf
+
 @app.route('/api/save-idea', methods=['POST'])
 @login_required
 def save_idea():
     data = request.json or {}
-    if not data.get('title'):
+
+    title = (data.get('title') or '').strip()
+    content = (data.get('content') or '').strip()
+
+    if not title:
         return jsonify(error='Title required'), 400
 
-    folder = unique(clean(data['title']))
-    path = os.path.join(IDEAS, folder)
-    os.makedirs(path, exist_ok=True)
+    # get logged-in user info
+    user_id = session['user_id']
+    fernet = get_user_fernet()
 
-    data['dateCreated'] = data.get('dateCreated') or datetime.now().strftime('%Y-%m-%d')
-    data.setdefault('updates', [])
+    # create idea folder
+    idea_id = f"idea_{uuid.uuid4().hex}"
+    idea_dir = os.path.join(IDEAS, f"user_{user_id}", idea_id)
+    os.makedirs(idea_dir, exist_ok=True)
 
-    json_path = os.path.join(path, 'idea.json')
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
+    # -------- encrypt idea JSON --------
+    idea_payload = {
+    "title": data.get("title", ""),
+    "dateCreated": data.get("dateCreated") or datetime.now().strftime('%Y-%m-%d'),
+    "summary": data.get("summary", ""),
+    "trigger": data.get("trigger", ""),
+    "description": data.get("description", ""),
+    "useCases": data.get("useCases", []),
+    "potentialImpact": data.get("potentialImpact", ""),
+    "challenges": data.get("challenges", ""),
+    "currentUnderstanding": data.get("currentUnderstanding", ""),
+    "updates": data.get("updates", [])
+}
 
-    render_pdf(folder)
-    return jsonify(message='Idea saved', folder=folder)
+
+    enc_idea = fernet.encrypt(
+        json.dumps(idea_payload).encode('utf-8')
+    )
+
+    with open(os.path.join(idea_dir, 'idea.enc'), 'wb') as f:
+        f.write(enc_idea)
+
+    # -------- generate + encrypt PDF --------
+    pdf_bytes = render_pdf_bytes(idea_payload)  # same data, no disk write
+    enc_pdf = fernet.encrypt(pdf_bytes)
+
+    with open(os.path.join(idea_dir, 'pdf.enc'), 'wb') as f:
+        f.write(enc_pdf)
+
+    # -------- safe metadata --------
+    meta = {
+        "id": idea_id,
+        "title": title,
+        "created_at": datetime.now().isoformat()
+    }
+
+    with open(os.path.join(idea_dir, 'meta.json'), 'w', encoding='utf-8') as f:
+        json.dump(meta, f, indent=2)
+
+    return jsonify(message='Idea saved securely', idea_id=idea_id)
+
+@app.route('/api/idea/<idea_id>', methods=['GET'])
+@login_required
+def open_idea(idea_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify(error='Unauthorized'), 401
+
+    idea_dir = os.path.join(IDEAS, f"user_{user_id}", idea_id)
+    idea_enc_path = os.path.join(idea_dir, 'idea.enc')
+
+    if not os.path.exists(idea_enc_path):
+        return jsonify(error='Idea not found'), 404
+
+    try:
+        fernet = get_user_fernet()
+
+        with open(idea_enc_path, 'rb') as f:
+            enc_data = f.read()
+
+        idea_json = fernet.decrypt(enc_data)
+        data = json.loads(idea_json.decode('utf-8'))
+
+        return jsonify(data)
+
+    except Exception as e:
+        return jsonify(error='Failed to decrypt idea'), 500
+
+
+@app.route('/api/my-ideas', methods=['GET'])
+@login_required
+def my_ideas():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify([])
+
+    user_dir = os.path.join(IDEAS, f"user_{user_id}")
+    ideas = []
+
+    if not os.path.exists(user_dir):
+        return jsonify([])
+
+    for idea_id in os.listdir(user_dir):
+        idea_path = os.path.join(user_dir, idea_id)
+        meta_path = os.path.join(idea_path, 'meta.json')
+
+        if not os.path.isdir(idea_path):
+            continue
+        if not os.path.exists(meta_path):
+            continue
+
+        try:
+            with open(meta_path, 'r', encoding='utf-8') as f:
+                meta = json.load(f)
+                ideas.append(meta)
+        except Exception:
+            continue
+
+    # newest first
+    ideas.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+    return jsonify(ideas)
+
 
 
 @app.route('/api/dashboard/ideas')
@@ -267,50 +425,108 @@ def get_idea(folder):
     with open(path, encoding='utf-8') as f:
         return Response(json.dumps(json.load(f), indent=2), mimetype='application/json')
 
-@app.route('/api/idea/<folder>', methods=['DELETE'])
+import shutil
+
+@app.route('/api/idea/<idea_id>', methods=['DELETE'])
 @login_required
-def delete_idea(folder):
-    path = os.path.join(IDEAS, clean(folder))
+def delete_idea(idea_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify(error='Unauthorized'), 401
 
-    if not os.path.exists(path):
-        return jsonify(error='Not found'), 404
+    idea_dir = os.path.join(IDEAS, f"user_{user_id}", idea_id)
 
-    shutil.rmtree(path)
-    return jsonify(message='Deleted')
+    if not os.path.exists(idea_dir):
+        return jsonify(error='Idea not found'), 404
+
+    try:
+        shutil.rmtree(idea_dir)
+        return jsonify(message='Idea deleted successfully')
+    except Exception:
+        return jsonify(error='Failed to delete idea'), 500
+
 
 
 @app.route('/api/add-update', methods=['POST'])
 @login_required
 def add_update():
     data = request.json or {}
-    folder = clean(data.get('ideaTitle', ''))
-    path = os.path.join(IDEAS, folder, 'idea.json')
 
-    if not os.path.exists(path):
+    idea_id = data.get('ideaId')
+    update_text = (data.get('updateText') or '').strip()
+
+    if not idea_id or not update_text:
+        return jsonify(error='Invalid update data'), 400
+
+    user_id = session.get('user_id')
+    idea_dir = os.path.join(IDEAS, f"user_{user_id}", idea_id)
+    idea_enc_path = os.path.join(idea_dir, 'idea.enc')
+    pdf_enc_path = os.path.join(idea_dir, 'pdf.enc')
+
+    if not os.path.exists(idea_enc_path):
         return jsonify(error='Idea not found'), 404
 
-    with open(path, encoding='utf-8') as f:
-        idea = json.load(f)
+    try:
+        fernet = get_user_fernet()
 
-    idea.setdefault('updates', []).append({
-        'date': datetime.now().strftime('%Y-%m-%d'),
-        'text': data.get('updateText', '')
-    })
+        # ---- decrypt idea ----
+        with open(idea_enc_path, 'rb') as f:
+            enc = f.read()
+        idea = json.loads(fernet.decrypt(enc).decode('utf-8'))
 
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(idea, f, indent=2)
+        # ---- append update ----
+        idea.setdefault('updates', []).append({
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'text': update_text
+        })
 
-    render_pdf(folder)
-    return jsonify(message='Update added')
+        # ---- re-encrypt idea ----
+        with open(idea_enc_path, 'wb') as f:
+            f.write(fernet.encrypt(json.dumps(idea).encode('utf-8')))
 
+        # ---- regenerate + encrypt PDF ----
+        pdf_bytes = render_pdf_bytes(idea)
+        with open(pdf_enc_path, 'wb') as f:
+            f.write(fernet.encrypt(pdf_bytes))
 
-@app.route('/api/idea/<folder>/pdf')
+        return jsonify(message='Update added successfully')
+
+    except Exception as e:
+        return jsonify(error='Failed to update idea'), 500
+
+@app.route('/api/idea/<idea_id>/pdf', methods=['GET'])
 @login_required
-def view_pdf(folder):
-    pdf = os.path.join(IDEAS, clean(folder), 'idea.pdf')
-    if not os.path.exists(pdf):
-        render_pdf(clean(folder))
-    return send_from_directory(os.path.dirname(pdf), 'idea.pdf')
+def view_pdf(idea_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify(error='Unauthorized'), 401
+
+    idea_dir = os.path.join(IDEAS, f"user_{user_id}", idea_id)
+    pdf_enc_path = os.path.join(idea_dir, 'pdf.enc')
+
+    if not os.path.exists(pdf_enc_path):
+        return jsonify(error='PDF not found'), 404
+
+    try:
+        fernet = get_user_fernet()
+
+        with open(pdf_enc_path, 'rb') as f:
+            enc_pdf = f.read()
+
+        pdf_bytes = fernet.decrypt(enc_pdf)
+
+        return Response(
+            pdf_bytes,
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': 'inline; filename=idea.pdf'
+            }
+        )
+
+    except Exception:
+        return jsonify(error='Failed to decrypt PDF'), 500
+
+
 
 # ================= END IDEA & PDF ROUTES =================
 # ================= SIGNUP (STEP 4) =================
@@ -327,23 +543,33 @@ def signup():
     password = data.get('password') or ''
 
     if not username or not password:
-        return jsonify(error='Username and password required'), 400
+        return redirect('/signup?error=missing')
+
+
 
     users = load_users()
 
     if username in users:
-        return jsonify(error='User already exists'), 409
+        return redirect('/signup?error=exists')
+
+
+    # generate unique incremental user id
+    existing_ids = [
+        u.get('id', 0) for u in users.values() if isinstance(u, dict)
+    ]
+    new_user_id = max(existing_ids, default=0) + 1
 
     users[username] = {
+        'id': new_user_id,
         'password_hash': generate_password_hash(password),
         'password_encrypted': MASTER_FERNET.encrypt(password.encode()).decode('utf-8'),
         'created_at': datetime.now().isoformat()
     }
 
     save_users(users)
-    return jsonify(message='Signup successful')
-
+    return redirect('/')
 # ================= END SIGNUP =================
+
 # ================= LOGIN (STEP 5) =================
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -357,36 +583,81 @@ def login():
     password = data.get('password') or ''
 
     if not username or not password:
-        return jsonify(error='Username and password required'), 400
+        return redirect('/login?error=missing')
+
 
     # ---- Hidden admin login ----
     if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-        # session['user'] = ADMIN_USERNAME
-        # session['role'] = 'admin'
-        # return jsonify(redirect='/dashboard')
-# -------------------------------------
-# derive user encryption key and store in session
         f = derive_user_fernet(username, password)
 
         session['user'] = username
-        session['role'] = 'user'
-        session['ukey'] = f._signing_key + f._encryption_key  # opaque, in-memory only
+        session['role'] = 'admin'
+        session['user_id'] = 'admin'
+        session['ukey'] = f._signing_key + f._encryption_key  # in-memory only
 
-        return jsonify(redirect='/dashboard')
+        # ensure admin ideas folder exists
+        admin_ideas_dir = os.path.join(IDEAS, 'user_admin')
+        os.makedirs(admin_ideas_dir, exist_ok=True)
 
+        return redirect('/admin')
 
-#--------------------------------------       
+    # ---- Normal user login ----
     users = load_users()
     user = users.get(username)
 
     if not user or not check_password_hash(user['password_hash'], password):
-        return jsonify(error='Invalid credentials'), 401
+        return redirect('/login?error=invalid')
+
+
+    f = derive_user_fernet(username, password)
 
     session['user'] = username
     session['role'] = 'user'
-    return jsonify(redirect='/dashboard')
+    session['user_id'] = user['id']
+    session['ukey'] = f._signing_key + f._encryption_key  # in-memory only
+
+    # ensure user ideas folder exists
+    user_ideas_dir = os.path.join(IDEAS, f"user_{user['id']}")
+    os.makedirs(user_ideas_dir, exist_ok=True)
+
+    return redirect('/dashboard')
+
 
 # ================= END LOGIN =================
+@app.route('/api/profile')
+def profile():
+    if not is_logged_in():
+        return jsonify(error='Not logged in'), 401
+    return jsonify(username=session['user'])
+
+
+@app.route('/api/delete-account', methods=['POST'])
+def delete_account():
+    if not is_logged_in():
+        return jsonify(error='Not logged in'), 401
+
+    username = session['user']
+
+    # ---- delete ideas folder ----
+    user_ideas = os.path.join(IDEAS, username)
+    if os.path.exists(user_ideas):
+        shutil.rmtree(user_ideas)
+
+    # ---- delete user from users.enc ----
+    users = load_users()
+    if username in users:
+        users.pop(username)
+        save_users(users)
+
+    # ---- clear session ----
+    session.clear()
+
+    return jsonify(message='Account deleted')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/')
 
 
 # (your remaining idea routes stay the same — we’ll re-add next step)

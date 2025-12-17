@@ -2,61 +2,235 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Admin Panel</title>
+  <title>Admin Panel – IdeaJournal</title>
+
   <style>
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #999; padding: 6px; font-size: 14px; }
-    th { background: #eee; }
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: radial-gradient(circle at top, #111827, #020617);
+      color: #e5e7eb;
+      padding: 40px;
+    }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      letter-spacing: 0.6px;
+    }
+
+    .subtitle {
+      opacity: 0.75;
+      margin-bottom: 30px;
+      font-size: 15px;
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(12px);
+      border-radius: 16px;
+      padding: 25px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    th, td {
+      padding: 14px 12px;
+      font-size: 13px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      vertical-align: top;
+    }
+
+    th {
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.8px;
+      opacity: 0.8;
+    }
+
+    tr:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .mono {
+      max-width: 320px;
+      word-break: break-all;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    button {
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      color: #fff;
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6);
+    }
+
+    /* MODAL */
+    #recoverModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      z-index: 1000;
+    }
+
+    .modal-box {
+      width: 100%;
+      max-width: 360px;
+      background: rgba(17, 24, 39, 0.95);
+      padding: 28px;
+      border-radius: 14px;
+      margin: 12% auto;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8);
+      animation: fadeIn 0.4s ease;
+    }
+
+    .modal-box h3 {
+      margin-top: 0;
+      font-size: 22px;
+      margin-bottom: 6px;
+    }
+
+    .modal-box p.note {
+      font-size: 13px;
+      opacity: 0.75;
+      margin-bottom: 18px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      outline: none;
+      margin-bottom: 14px;
+    }
+
+    input:focus {
+      border-color: #ef4444;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .cancel {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      box-shadow: none;
+      color: #e5e7eb;
+    }
+
+    #recoverResult {
+      margin-top: 12px;
+      font-weight: 600;
+      font-size: 13px;
+      word-break: break-all;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(15px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .glow {
+      position: fixed;
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(239,68,68,0.35), transparent 70%);
+      top: -100px;
+      right: -100px;
+      filter: blur(50px);
+      pointer-events: none;
+    }
   </style>
 </head>
+
 <body>
 
-<h2>Admin Panel</h2>
+<div class="glow"></div>
 
-<table>
-  <tr>
-    <th>Username</th>
-    <th>Password Hash</th>
-    <th>Encrypted Password</th>
-    <th>Created At</th>
-    <th>Action</th>
-  </tr>
+<h2>Admin Control Panel</h2>
+<div class="subtitle">
+  Elevated access · Sensitive operations · Absolute accountability
+</div>
 
-  {% for username, user in users.items() %}
-  <tr>
-  <td>{{ username }}</td>
-  <td style="max-width:300px; word-break:break-all;">
-    {{ user.password_hash }}
-  </td>
-  <td style="max-width:300px; word-break:break-all;">
-    {{ user.password_encrypted }}
-  </td>
-  <td>{{ user.created_at }}</td>
-  <td>
-    <button onclick="openRecover('{{ username }}')">Recover</button>
-  </td>
-</tr>
+<div class="panel">
+  <table>
+    <tr>
+      <th>Username</th>
+      <th>Password Hash</th>
+      <th>Encrypted Password</th>
+      <th>Created At</th>
+      <th>Action</th>
+    </tr>
 
-  {% endfor %}
+    {% for username, user in users.items() %}
+    <tr>
+      <td>{{ username }}</td>
+      <td class="mono">{{ user.password_hash }}</td>
+      <td class="mono">{{ user.password_encrypted }}</td>
+      <td>{{ user.created_at }}</td>
+      <td>
+        <button onclick="openRecover('{{ username }}')">Recover</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
 
-</table>
 <!-- Recover Password Modal -->
-<div id="recoverModal"
-     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);">
-  <div style="background:#fff; padding:20px; width:300px; margin:15% auto;">
-    <h3>Recover Password</h3>
+<div id="recoverModal">
+  <div class="modal-box">
+    <h3>Credential Recovery</h3>
+    <p class="note">
+      This operation is logged. Proceed only if you are authorized.
+    </p>
 
     <input type="hidden" id="recoverUser">
-    <input type="password" id="adminPass"
-           placeholder="Admin password"
-           style="width:100%;">
+    <input type="password" id="adminPass" placeholder="Admin master password">
 
-    <br><br>
-    <button onclick="confirmRecover()">Confirm</button>
-    <button onclick="closeRecover()">Cancel</button>
+    <div class="modal-actions">
+      <button onclick="confirmRecover()">Confirm</button>
+      <button class="cancel" onclick="closeRecover()">Cancel</button>
+    </div>
 
-    <p id="recoverResult"
-       style="margin-top:10px; font-weight:bold;"></p>
+    <p id="recoverResult"></p>
   </div>
 </div>
 

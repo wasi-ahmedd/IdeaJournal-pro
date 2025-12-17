@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Safura Fatima</title>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Pacifico&display=swap');
+
+body{
+    margin:0;
+    height:100vh;
+    background:#fff;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-family:'Pacifico', cursive;
+    overflow:hidden;
+    position:relative;
+}
+
+/* Name */
+.name{
+    font-size:4rem;
+    color:#222;
+    z-index:10;
+    animation:floatName 4s ease-in-out infinite;
+}
+
+@keyframes floatName{
+    0%,100%{transform:translateY(0);}
+    50%{transform:translateY(-8px);}
+}
+
+/* Blossom tree SVG */
+.tree{
+    position:absolute;
+    left:40px;
+    bottom:0;
+    width:300px;
+    z-index:2;
+    animation:treeSway 6s ease-in-out infinite;
+}
+
+@keyframes treeSway{
+    0%,100%{transform:rotate(0deg);}
+    50%{transform:rotate(1deg);}
+}
+
+/* Falling petals */
+.petal{
+    position:absolute;
+    width:14px;
+    height:18px;
+    background:linear-gradient(#f8cdd7,#f1aebb);
+    border-radius:60% 60% 60% 60%;
+    opacity:0.7;
+    animation:petalFall linear infinite;
+}
+
+@keyframes petalFall{
+    0%{
+        transform:translateY(-30px) rotate(0deg);
+        opacity:0;
+    }
+    10%{opacity:0.7;}
+    100%{
+        transform:translateY(110vh) rotate(180deg);
+        opacity:0;
+    }
+}
+
+/* Feminine corner blobs */
+.corner{
+    position:absolute;
+    width:160px;
+    height:160px;
+    background:radial-gradient(circle at 30% 30%, #fbe4ea, #f3c6d3);
+    border-radius:60% 40% 70% 30% / 50% 60% 40% 50%;
+    animation:blobMove 10s ease-in-out infinite;
+    opacity:0.9;
+}
+
+.top-left{top:-60px;left:-60px;}
+.top-right{top:-60px;right:-60px;animation-delay:2s;}
+.bottom-right{bottom:-60px;right:-60px;animation-delay:4s;}
+
+@keyframes blobMove{
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(1.08);}
+}
+</style>
+</head>
+
+<body>
+
+<!-- SVG Blossom Tree -->
+<svg class="tree" viewBox="0 0 300 400">
+    <!-- Trunk -->
+    <path d="M150 400 C140 320, 145 260, 150 200
+             C155 260, 160 320, 150 400"
+          fill="#7a4a2e"/>
+
+    <!-- Branches -->
+    <path d="M150 260 C100 230, 80 200, 70 170" stroke="#7a4a2e" stroke-width="8" fill="none"/>
+    <path d="M150 240 C200 210, 230 180, 240 150" stroke="#7a4a2e" stroke-width="8" fill="none"/>
+
+    <!-- Blossom canopy -->
+    <circle cx="90" cy="160" r="45" fill="#f7b0c4"/>
+    <circle cx="140" cy="120" r="55" fill="#f8cdd7"/>
+    <circle cx="190" cy="150" r="50" fill="#f1aebb"/>
+    <circle cx="130" cy="170" r="60" fill="#ffd6e1"/>
+    <circle cx="180" cy="110" r="40" fill="#f7b0c4"/>
+</svg>
+
+<!-- Falling petals -->
+<div class="petal" style="left:30%; animation-duration:9s;"></div>
+<div class="petal" style="left:40%; animation-duration:11s; animation-delay:2s;"></div>
+<div class="petal" style="left:55%; animation-duration:10s; animation-delay:4s;"></div>
+<div class="petal" style="left:70%; animation-duration:12s; animation-delay:1s;"></div>
+<div class="petal" style="left:85%; animation-duration:9s; animation-delay:5s;"></div>
+
+<!-- Corner blobs -->
+<div class="corner top-left"></div>
+<div class="corner top-right"></div>
+<div class="corner bottom-right"></div>
+
+<!-- Name -->
+<div class="name">Safura Fatima</div>
+
+</body>
+</html>

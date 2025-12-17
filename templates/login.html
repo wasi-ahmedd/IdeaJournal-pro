@@ -1,20 +1,182 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Login</title>
+    <title>Login – IdeaJournal</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: radial-gradient(circle at top, #1f2933, #0f172a);
+            color: #e5e7eb;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 380px;
+            padding: 40px 35px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+            text-align: center;
+            animation: fadeIn 0.7s ease;
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 25px;
+            font-size: 30px;
+            letter-spacing: 0.5px;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        input {
+            padding: 14px 16px;
+            font-size: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            outline: none;
+            transition: border 0.25s ease, background 0.25s ease;
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.65);
+        }
+
+        input:focus {
+            border-color: #3b82f6;
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        button {
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            color: #fff;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            box-shadow: 0 8px 25px rgba(37, 99, 235, 0.45);
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.55);
+        }
+
+        button:active {
+            transform: translateY(-1px);
+        }
+
+        .back {
+            margin-top: 22px;
+        }
+
+        .back a {
+            text-decoration: none;
+        }
+
+        .back button {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            box-shadow: none;
+            font-weight: 500;
+        }
+
+        .back button:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-2px);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(18px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* soft glow */
+        .glow {
+            position: absolute;
+            width: 260px;
+            height: 260px;
+            background: radial-gradient(circle, rgba(59,130,246,0.35), transparent 70%);
+            bottom: -70px;
+            left: -70px;
+            filter: blur(40px);
+            pointer-events: none;
+        }
+    </style>
 </head>
+
 <body>
-  <h2>Login</h2>
 
-  <form method="post" action="/login">
-    <label>Username</label><br>
-    <input name="username" required><br><br>
+    <div class="glow"></div>
 
-    <label>Password</label><br>
-    <input type="password" name="password" required><br><br>
+    <div class="login-box">
+        <h2>Login</h2>
+        <div id="errorBox" style="
+        display:none;
+        background:rgba(239,68,68,0.15);
+        border:1px solid #ef4444;
+        color:#fecaca;
+        padding:10px;
+        border-radius:10px;
+        margin-bottom:18px;
+        font-size:14px;
+        ">
+        </div>
 
-    <button type="submit">Login</button>
-  </form>
+        <form id="loginForm" method="post" action="/login">
+            <input type="text" name="username" placeholder="Username" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+
+        <div class="back">
+            <a href="/">
+                <button type="button">Back to Home</button>
+            </a>
+        </div>
+    </div>
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const error = params.get('error');
+  const box = document.getElementById('errorBox');
+
+  if(error){
+    box.style.display = 'block';
+
+    if(error === 'invalid'){
+      box.innerText = 'Invalid username or password';
+    } else if(error === 'missing'){
+      box.innerText = 'Please enter username and password';
+    }
+  }
+</script>
+
 </body>
 </html>

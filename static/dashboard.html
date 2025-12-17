@@ -3,42 +3,237 @@
 <head>
   <title>Idea Dashboard</title>
   <style>
-body{font-family:Arial,sans-serif;background:#0f172a;color:#e5e7eb;padding:30px}
-h1{margin-bottom:20px}
-.top-bar{display:flex;justify-content:space-between;margin-bottom:20px}
-button{padding:10px 14px;border-radius:10px;border:none;cursor:pointer;background:#2563eb;color:white;font-weight:bold;transition:.25s}
-button:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.35)}
-button:active{transform:translateY(0);box-shadow:0 4px 10px rgba(0,0,0,.25)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
-.card{background:#020617;border:1px solid #1e293b;border-radius:16px;padding:18px}
-.meta{font-size:13px;opacity:.8}
-.actions{margin-top:12px;display:flex;gap:8px}
-.delete{background:#dc2626}
+  body{font-family:Arial,sans-serif;background:#0f172a;color:#e5e7eb;padding:30px}
+  h1{margin-bottom:20px}
+
+  .top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+
+  button{
+    padding:10px 14px;
+    border-radius:10px;
+    border:none;
+    cursor:pointer;
+    background:#2563eb;
+    color:white;
+    font-weight:bold;
+    transition:.25s
+  }
+  button:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.35)}
+  button:active{transform:translateY(0);box-shadow:0 4px 10px rgba(0,0,0,.25)}
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+    gap:20px
+  }
+
+  .card{
+    background:#020617;
+    border:1px solid #1e293b;
+    border-radius:16px;
+    padding:18px
+  }
+
+  .meta{font-size:13px;opacity:.8}
+  .actions{margin-top:12px;display:flex;gap:8px}
+  .delete{background:#dc2626}
+
+  /* ===== PROFILE MODAL (CLEAN) ===== */
+
+  .modal-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    display:none;
+    z-index:999;
+  }
+
+  .modal-card{
+    background:#020617;
+    border:1px solid #1e293b;
+    border-radius:16px;
+    padding:20px;
+    width:320px;
+    margin:15% auto;
+    box-shadow:0 20px 50px rgba(0,0,0,.5);
+  }
+
+  .modal-card h3{
+    margin-top:0;
+    margin-bottom:14px;
+  }
+
+  .profile-row{
+    background:#0f172a;
+    padding:12px;
+    border-radius:10px;
+    margin-bottom:16px;
+    font-size:14px;
+  }
+
+  .danger-zone{
+    border-top:1px dashed #1e293b;
+    padding-top:14px;
+  }
+
+  .danger-zone p{
+    font-size:13px;
+    opacity:.85;
+    margin-bottom:12px;
+  }
+
+  .danger-btn{
+    background:#dc2626;
+    width:100%;
+  }
+
+  .close-btn{
+    margin-top:10px;
+    background:#334155;
+    width:100%;
+  }
 </style>
+
 </head>
 <body>
+
 <div class="top-bar">
   <h1>📊 Idea Dashboard</h1>
-  <button onclick="location.href='/'">➕ New Idea</button>
+  <div>
+    <button id="profileBtn">Profile</button>
+    <button onclick="window.location.href='/static/index.html'">➕ New Idea</button>
+    <button onclick="window.location.href='/logout'">Logout</button>
+  </div>
 </div>
+
 <div class="grid" id="ideas"></div>
+
 <script>
-async function load(){
-  const r = await fetch('/api/dashboard/ideas');
-  const ideas = await r.json();
-  const c = document.getElementById('ideas');
-  c.innerHTML='';
-  ideas.forEach(i=>{
-    const d=document.createElement('div');
-    d.className='card';
-    d.innerHTML=`<h3>${i.title}</h3><div class=meta>Created: ${i.dateCreated}</div><div class=meta>Updates: ${i.updatesCount}</div><p>${i.summary||''}</p><div class=actions><button onclick="openIdea('${i.folder}')">Open</button><button onclick="viewPDF('${i.folder}')">PDF</button><button class=delete onclick="del('${i.folder}')">Delete</button></div>`;
-    c.appendChild(d);
-  });
+// STEP 3A: List ideas using SAFE metadata only (no decryption)
+async function loadIdeas(){
+  try{
+    const r = await fetch('/api/my-ideas');
+    const ideas = await r.json();
+
+    const c = document.getElementById('ideas');
+    c.innerHTML = '';
+
+    if(!Array.isArray(ideas) || ideas.length === 0){
+      c.innerHTML = '<p>No ideas yet. Click "+ New Idea" to create one.</p>';
+      return;
+    }
+
+    ideas.forEach(i => {
+      const d = document.createElement('div');
+      d.className = 'card';
+      d.innerHTML = `
+        <h3>${i.title}</h3>
+        <div class="meta">Created: ${i.created_at}</div>
+        <div class="actions">
+          <button onclick="openIdea('${i.id}')">Open</button>
+          <button onclick="viewPDF('${i.id}')">PDF</button>
+          <button class="delete" onclick="delIdea('${i.id}')">Delete</button>
+        </div>
+      `;
+      c.appendChild(d);
+    });
+
+  }catch(e){
+    console.error(e);
+    alert('Failed to load ideas');
+  }
 }
-function openIdea(f){location.href='/?idea='+encodeURIComponent(f)}
-function viewPDF(f){window.open('/api/idea/'+encodeURIComponent(f)+'/pdf','_blank')}
-async function del(f){if(!confirm('Delete?'))return;const r=await fetch('/api/idea/'+encodeURIComponent(f),{method:'DELETE'});const j=await r.json();alert(j.message||j.error);load();}
-load();
+
+// STEP 3B (next): decrypt JSON on demand
+function openIdea(id){
+  location.href = '/static/index.html?idea=' + encodeURIComponent(id);
+}
+
+// STEP 3C (next): decrypt PDF on demand
+function viewPDF(id){
+  window.open('/api/idea/' + encodeURIComponent(id) + '/pdf', '_blank');
+}
+
+// STEP 3D (next): delete idea
+async function delIdea(id){
+  if(!confirm('Delete this idea?')) return;
+
+  try{
+    const r = await fetch('/api/idea/' + encodeURIComponent(id), { method: 'DELETE' });
+    const j = await r.json();
+
+    if(!r.ok){
+      alert(j.error || 'Failed to delete');
+      return;
+    }
+
+    alert(j.message || 'Deleted');
+    loadIdeas();
+
+  }catch(e){
+    console.error(e);
+    alert('Server error while deleting');
+  }
+}
+document.getElementById('profileBtn').onclick = async () => {
+  const res = await fetch('/api/profile');
+  if (!res.ok) {
+    alert('Failed to load profile');
+    return;
+  }
+  const data = await res.json();
+  document.getElementById('profileUsername').innerText = data.username;
+  document.getElementById('profileModal').style.display = 'block';
+};
+
+function closeProfile() {
+  document.getElementById('profileModal').style.display = 'none';
+}
+
+async function confirmDeleteAccount() {
+  const ok = confirm(
+    'Are you sure?\nThis will permanently delete your account and all ideas.'
+  );
+  if (!ok) return;
+
+  const res = await fetch('/api/delete-account', { method: 'POST' });
+  const data = await res.json();
+
+  if (data.message) {
+    alert('Account deleted');
+    window.location.href = '/';
+  } else {
+    alert(data.error || 'Failed to delete account');
+  }
+}
+loadIdeas();
 </script>
+<!-- Profile Modal -->
+<!-- Profile Modal -->
+<div id="profileModal" class="modal-overlay">
+  <div class="modal-card">
+
+    <h3>Profile</h3>
+
+    <div class="profile-row">
+      <b>Username:</b>
+      <span id="profileUsername"></span>
+    </div>
+
+    <div class="danger-zone">
+      <p>
+        Deleting your account will permanently remove all your ideas and data.
+      </p>
+      <button class="danger-btn" onclick="confirmDeleteAccount()">
+        Delete Account
+      </button>
+    </div>
+
+    <button class="close-btn" onclick="closeProfile()">Close</button>
+
+  </div>
+</div>
+
+
 </body>
 </html>

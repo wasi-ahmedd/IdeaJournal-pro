@@ -158,52 +158,120 @@ if (typeof data !== 'object') {
 });
 // ================= END JSON IMPORT =================
 
-function qp(n){return new URLSearchParams(location.search).get(n)}
-let currentFolder = qp('idea');
-
-async function loadIdea(){
-  if(!currentFolder) return;
-  const r = await fetch('/api/idea/'+encodeURIComponent(currentFolder));
-  if(!r.ok) return;
-  const d = await r.json();
-  $('title').value=d.title||'';
-  $('date').value=d.dateCreated||'';
-  $('summary').value=d.summary||'';
-  $('trigger').value=d.trigger||'';
-  $('description').value=d.description||'';
-  $('usecases').value=(d.useCases||[]).join(', ');
-  $('impact').value=d.potentialImpact||'';
-  $('challenges').value=d.challenges||'';
-  $('understanding').value=d.currentUnderstanding||'';
-  $('status').innerText='Loaded: '+d.title;
+function qp(n){
+  return new URLSearchParams(location.search).get(n);
 }
 
-$('saveBtn').onclick = async ()=>{
-  const payload={
-    title:$('title').value,
-    dateCreated:$('date').value,
-    summary:$('summary').value,
-    trigger:$('trigger').value,
-    description:$('description').value,
-    useCases:$('usecases').value.split(',').map(x=>x.trim()).filter(Boolean),
-    potentialImpact:$('impact').value,
-    challenges:$('challenges').value,
-    currentUnderstanding:$('understanding').value
+let currentFolder = qp('idea');
+
+/* ================= LOAD IDEA (SAFE) ================= */
+async function loadIdea(){
+  if(!currentFolder) return;
+
+  try {
+    const r = await fetch('/api/idea/' + encodeURIComponent(currentFolder));
+    if(!r.ok){
+      const j = await r.json().catch(()=> ({}));
+      alert(j.error || 'Failed to load idea');
+      return;
+    }
+
+    const d = await r.json();
+
+    $('title').value = d.title || '';
+    $('date').value = d.dateCreated || '';
+    $('summary').value = d.summary || '';
+    $('trigger').value = d.trigger || '';
+    $('description').value = d.description || '';
+    $('usecases').value = (d.useCases || []).join(', ');
+    $('impact').value = d.potentialImpact || '';
+    $('challenges').value = d.challenges || '';
+    $('understanding').value = d.currentUnderstanding || '';
+
+    $('status').innerText = 'Loaded: ' + (d.title || 'Idea');
+
+  } catch (e) {
+    console.error(e);
+    alert('Server error while loading idea');
+  }
+}
+
+/* ================= SAVE IDEA ================= */
+$('saveBtn').onclick = async () => {
+  const payload = {
+    title: $('title').value,
+    dateCreated: $('date').value,
+    summary: $('summary').value,
+    trigger: $('trigger').value,
+    description: $('description').value,
+    useCases: $('usecases').value
+      .split(',')
+      .map(x => x.trim())
+      .filter(Boolean),
+    potentialImpact: $('impact').value,
+    challenges: $('challenges').value,
+    currentUnderstanding: $('understanding').value
   };
-  const r = await fetch('/api/save-idea',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  const j = await r.json();
-  alert(j.message||j.error);
-  location.href='/dashboard';
+
+  try {
+    const r = await fetch('/api/save-idea', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const j = await r.json().catch(()=> ({}));
+
+    if(!r.ok){
+      alert(j.error || 'Failed to save idea');
+      return;
+    }
+
+    alert(j.message || 'Idea saved successfully');
+    //location.href = '/dashboard';
+
+  } catch (e) {
+    console.error(e);
+    alert('Server error while saving idea');
+  }
 };
 
-$('addUpdateBtn').onclick = async ()=>{
-  if(!currentFolder) return alert('Open an idea first');
-  const r = await fetch('/api/add-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ideaTitle:currentFolder,updateTitle:$('updateTitle').value,updateText:$('updateText').value})});
-  const j = await r.json();
-  alert(j.message||j.error);
+/* ================= ADD UPDATE ================= */
+$('addUpdateBtn').onclick = async () => {
+  if(!currentFolder){
+    alert('Open an idea first');
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/add-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ideaId: currentFolder,
+        updateTitle: $('updateTitle').value,
+        updateText: $('updateText').value
+      })
+    });
+
+    const j = await r.json().catch(()=> ({}));
+
+    if(!r.ok){
+      alert(j.error || 'Failed to add update');
+      return;
+    }
+
+    alert(j.message || 'Update added');
+
+  } catch (e) {
+    console.error(e);
+    alert('Server error while adding update');
+  }
 };
 
+/* ================= INIT ================= */
 loadIdea();
+
 </script>
 </body>
 </html>
