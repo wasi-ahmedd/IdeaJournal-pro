@@ -9,7 +9,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem
 
 from werkzeug.security import generate_password_hash, check_password_hash
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
+
 
 
 # ================= BASE PATHS =================
@@ -45,6 +46,31 @@ def is_logged_in():
 
 def is_admin():
     return session.get("role") == "admin"
+# ================= USER IDEA HELPERS (STEP 8) =================
+
+def user_root():
+    return os.path.join(IDEAS, session['user'])
+
+def idea_root(idea_id):
+    return os.path.join(user_root(), idea_id)
+
+def derive_user_fernet_from_session():
+    raw = session.get('ukey')
+    if not raw:
+        raise RuntimeError("Missing user encryption key in session")
+    return Fernet(base64.urlsafe_b64encode(raw))
+
+# ================= END USER IDEA HELPERS =================
+
+
+def derive_user_fernet(username: str, password: str) -> Fernet:
+    """
+    Derive a per-user Fernet key from username + password.
+    Stored ONLY in session memory.
+    """
+    raw = hashlib.sha256((username + password).encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(raw))
+
 
 from functools import wraps
 from flask import abort
@@ -106,10 +132,14 @@ def unique(name):
         n = f"{name} ({i})"
     return n
 
-@app.route("/")
-@login_required
+from flask import render_template, redirect
+
+@app.route('/')
 def home():
-    return send_from_directory(STATIC, "index.html")
+    if session.get("user"):
+        return redirect('/dashboard')
+    return render_template('home.html')
+
 
 @app.route("/dashboard")
 @login_required
@@ -331,10 +361,21 @@ def login():
 
     # ---- Hidden admin login ----
     if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-        session['user'] = ADMIN_USERNAME
-        session['role'] = 'admin'
+        # session['user'] = ADMIN_USERNAME
+        # session['role'] = 'admin'
+        # return jsonify(redirect='/dashboard')
+# -------------------------------------
+# derive user encryption key and store in session
+        f = derive_user_fernet(username, password)
+
+        session['user'] = username
+        session['role'] = 'user'
+        session['ukey'] = f._signing_key + f._encryption_key  # opaque, in-memory only
+
         return jsonify(redirect='/dashboard')
 
+
+#--------------------------------------       
     users = load_users()
     user = users.get(username)
 
@@ -356,7 +397,10 @@ from flask import render_template
 @admin_required
 def admin_page():
     users = load_users()
+    session.pop('ukey', None)
+
     return render_template('admin.html', users=users)
+
 
 @app.route('/admin/recover', methods=['POST'])
 @admin_required
