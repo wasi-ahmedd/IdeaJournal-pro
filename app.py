@@ -45,6 +45,17 @@ def is_logged_in():
 
 def is_admin():
     return session.get("role") == "admin"
+from functools import wraps
+from flask import redirect
+
+def login_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("user"):
+            return redirect("/login")
+        return fn(*args, **kwargs)
+    return wrapper
+
 
 
 # ================= USER STORE (STEP 2) =================
@@ -84,15 +95,17 @@ def unique(name):
     return n
 
 @app.route("/")
+@login_required
 def home():
     return send_from_directory(STATIC, "index.html")
 
 @app.route("/dashboard")
+@login_required
 def dash():
     return send_from_directory(STATIC, "dashboard.html")
 
 
-    # ================= IDEA & PDF ROUTES (STEP 3) =================
+# ================= IDEA & PDF ROUTES (STEP 3) =================
 def render_pdf(folder):
     json_path = os.path.join(IDEAS, folder, 'idea.json')
     pdf_path = os.path.join(IDEAS, folder, 'idea.pdf')
@@ -163,6 +176,7 @@ def render_pdf(folder):
     doc.build(story)
 
 @app.route('/api/save-idea', methods=['POST'])
+@login_required
 def save_idea():
     data = request.json or {}
     if not data.get('title'):
@@ -184,6 +198,7 @@ def save_idea():
 
 
 @app.route('/api/dashboard/ideas')
+@login_required
 def list_ideas():
     ideas = []
     for f in os.listdir(IDEAS):
@@ -202,6 +217,7 @@ def list_ideas():
 
 
 @app.route('/api/idea/<folder>')
+@login_required
 def get_idea(folder):
     path = os.path.join(IDEAS, clean(folder), 'idea.json')
     if not os.path.exists(path):
@@ -209,8 +225,20 @@ def get_idea(folder):
     with open(path, encoding='utf-8') as f:
         return Response(json.dumps(json.load(f), indent=2), mimetype='application/json')
 
+@app.route('/api/idea/<folder>', methods=['DELETE'])
+@login_required
+def delete_idea(folder):
+    path = os.path.join(IDEAS, clean(folder))
+
+    if not os.path.exists(path):
+        return jsonify(error='Not found'), 404
+
+    shutil.rmtree(path)
+    return jsonify(message='Deleted')
+
 
 @app.route('/api/add-update', methods=['POST'])
+@login_required
 def add_update():
     data = request.json or {}
     folder = clean(data.get('ideaTitle', ''))
@@ -235,6 +263,7 @@ def add_update():
 
 
 @app.route('/api/idea/<folder>/pdf')
+@login_required
 def view_pdf(folder):
     pdf = os.path.join(IDEAS, clean(folder), 'idea.pdf')
     if not os.path.exists(pdf):
