@@ -19,22 +19,77 @@
     <th>Password Hash</th>
     <th>Encrypted Password</th>
     <th>Created At</th>
+    <th>Action</th>
   </tr>
 
   {% for username, user in users.items() %}
   <tr>
-    <td>{{ username }}</td>
-    <td style="max-width:300px; word-break:break-all;">
-      {{ user.password_hash }}
-    </td>
-    <td style="max-width:300px; word-break:break-all;">
-      {{ user.password_encrypted }}
-    </td>
-    <td>{{ user.created_at }}</td>
-  </tr>
+  <td>{{ username }}</td>
+  <td style="max-width:300px; word-break:break-all;">
+    {{ user.password_hash }}
+  </td>
+  <td style="max-width:300px; word-break:break-all;">
+    {{ user.password_encrypted }}
+  </td>
+  <td>{{ user.created_at }}</td>
+  <td>
+    <button onclick="openRecover('{{ username }}')">Recover</button>
+  </td>
+</tr>
+
   {% endfor %}
 
 </table>
+<!-- Recover Password Modal -->
+<div id="recoverModal"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);">
+  <div style="background:#fff; padding:20px; width:300px; margin:15% auto;">
+    <h3>Recover Password</h3>
+
+    <input type="hidden" id="recoverUser">
+    <input type="password" id="adminPass"
+           placeholder="Admin password"
+           style="width:100%;">
+
+    <br><br>
+    <button onclick="confirmRecover()">Confirm</button>
+    <button onclick="closeRecover()">Cancel</button>
+
+    <p id="recoverResult"
+       style="margin-top:10px; font-weight:bold;"></p>
+  </div>
+</div>
+
+<script>
+function openRecover(username) {
+  document.getElementById('recoverUser').value = username;
+  document.getElementById('adminPass').value = '';
+  document.getElementById('recoverResult').innerText = '';
+  document.getElementById('recoverModal').style.display = 'block';
+}
+
+function closeRecover() {
+  document.getElementById('recoverModal').style.display = 'none';
+}
+
+async function confirmRecover() {
+  const username = document.getElementById('recoverUser').value;
+  const adminPass = document.getElementById('adminPass').value;
+
+  const res = await fetch('/admin/recover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: username,
+      admin_password: adminPass
+    })
+  });
+
+  const data = await res.json();
+  document.getElementById('recoverResult').innerText =
+    data.password || data.error;
+}
+</script>
 
 </body>
 </html>

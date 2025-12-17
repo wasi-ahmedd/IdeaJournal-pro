@@ -358,6 +358,36 @@ def admin_page():
     users = load_users()
     return render_template('admin.html', users=users)
 
+@app.route('/admin/recover', methods=['POST'])
+@admin_required
+def admin_recover_password():
+    data = request.json or {}
+    username = data.get('username')
+    admin_password = data.get('admin_password')
+
+    if not username or not admin_password:
+        return jsonify(error='Missing fields'), 400
+
+    # Extra safety: re-check admin password
+    if admin_password != ADMIN_PASSWORD:
+        return jsonify(error='Invalid admin password'), 403
+
+    users = load_users()
+    user = users.get(username)
+
+    if not user:
+        return jsonify(error='User not found'), 404
+
+    try:
+        decrypted = MASTER_FERNET.decrypt(
+            user['password_encrypted'].encode('utf-8')
+        ).decode('utf-8')
+    except Exception:
+        return jsonify(error='Decryption failed'), 500
+
+    # Return password ONCE (not stored, not logged)
+    return jsonify(password=decrypted)
+
 
 # ================= END ADMIN PAGE =================
 
