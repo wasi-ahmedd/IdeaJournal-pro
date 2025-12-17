@@ -708,4 +708,6 @@ def admin_recover_password():
 
 
 if __name__ == "__main__":
+   #app = Flask(__name__, static_folder='static', template_folder='templates')
+   #to run it locally uncomment below line
     app.run(debug=True)
